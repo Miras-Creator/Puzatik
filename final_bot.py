@@ -3,14 +3,19 @@ import os
 import time
 import requests
 import urllib3
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+
+# Глушим любые системные прокси Windows
+os.environ['http_proxy'] = ''
+os.environ['https_proxy'] = ''
+os.environ['HTTP_PROXY'] = ''
+os.environ['HTTPS_PROXY'] = ''
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# НАСТРОЙКА ТОКЕНОВ (Всё проверено лично)
 TOKEN = '9082711296:AAHyt1rQxc6KtleEc-dduVHDB86_ILbeebw'
 BOT_USERNAME = "puzatik"
+
+# КРИСТАЛЬНО ЧИСТЫЙ АДРЕС АПИ
 API_URL = f"https://telegram.org{TOKEN}"
 
 # Вечный официальный ключ авторизации ИИ Сбера
@@ -28,7 +33,6 @@ SYSTEM_INSTRUCTION = (
 )
 
 def get_g_token():
-    """Официальное получение ключа доступа к ИИ Сбера"""
     global g_token, g_token_expires
     if time.time() < g_token_expires: return g_token
     try:
@@ -45,7 +49,6 @@ def get_g_token():
         return None
 
 def ask_ai_sber(chat_id, user_text):
-    """Мгновенный пацанский ответ от ИИ Сбера без зависаний"""
     global user_context
     iam_token = get_g_token()
     if not iam_token: 
@@ -55,7 +58,6 @@ def ask_ai_sber(chat_id, user_text):
         user_context[chat_id] = []
     user_context[chat_id].append({'role': 'user', 'content': user_text})
     
-    # Формируем историю диалога для Сбера
     messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
     for msg in user_context[chat_id][-6:]:
         messages.append({"role": msg["role"], "content": msg["content"]})
@@ -77,24 +79,21 @@ def ask_ai_sber(chat_id, user_text):
             user_context[chat_id].pop()
         return "Эээ, ле, че-то в натуре сеть заморосила жи есть! Напиши еще раз, уцы!"
 
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Alive")
-
-def run_health_server():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    server.serve_forever()
-
-def bot_loop():
+def main_loop():
+    # ХАКЕРСКИЙ СБРОС ВЕБХУКА ПРЯМО ИЗ КОДА С УДАЛЕНИЕМ СТАРЫХ СООБЩЕНИЙ
+    print("=========================================")
+    print("[ХАК] Сбрасываем к чертям зависшие вебхуки...")
     try:
-        requests.get(f"{API_URL}/deleteWebhook", timeout=10)
+        # drop_pending_updates=True очистит сотни старых сообщений, которые забили очередь
+        requests.get(f"{API_URL}/deleteWebhook", params={"drop_pending_updates": True}, timeout=10)
         requests.get(f"{API_URL}/getUpdates", params={'offset': -1, 'timeout': 1}, timeout=10)
-        print("[СТАРТ] Бот Пузатик успешно запущен!")
-    except:
-        pass
+        print("[ХАК] Вебхуки зачищены, очередь Телеграма обнулена!")
+    except Exception as e:
+        print(f"[ХАК] Ошибка зачистки: {e}")
+        
+    print(" БОТ ПУЗАТИК УСПЕШНО ЗАПУЩЕН НА КОМПЬЮТЕРЕ!")
+    print(" Напиши ему /start в личные сообщения.")
+    print("=========================================")
     
     offset = 0
     while True:
@@ -129,6 +128,8 @@ def bot_loop():
                 if not should_respond:
                     continue
                 
+                print(f"[СООБЩЕНИЕ] Получен текст: \"{user_text}\"")
+                
                 if user_text.startswith('/'):
                     if user_text in ['/start', '/clear', f'/start@{BOT_USERNAME}', f'/clear@{BOT_USERNAME}']:
                         user_context[chat_id] = []
@@ -139,15 +140,15 @@ def bot_loop():
                 try: requests.post(f"{API_URL}/sendChatAction", json={'chat_id': chat_id, 'action': 'typing'}, timeout=5)
                 except: pass
                 
-                reply_text = run_reply = ask_ai_sber(chat_id, user_text)
+                reply_text = ask_ai_sber(chat_id, user_text)
                 
                 try:
                     requests.post(f"{API_URL}/sendMessage", json={'chat_id': chat_id, 'text': reply_text}, timeout=10)
+                    print("[УСПЕХ] Отправили ответ!")
                 except:
                     pass
         except:
             time.sleep(2)
 
 if __name__ == '__main__':
-    threading.Thread(target=run_health_server, daemon=True).start()
-    bot_loop()
+    main_loop()
