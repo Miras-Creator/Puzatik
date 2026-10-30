@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import os
 import time
 import requests
@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# ТОКЕН ТВОЕГО БОТА (Всё официально и напрямую)
+# ТОКЕН ТВОЕГО БОТА (Всё напрямую)
 TOKEN = '9082711296:AAHyt1rQxc6KtleEc-dduVHDB86_ILbeebw'
 BOT_USERNAME = "puzatik"
 API_URL = f"https://telegram.org{TOKEN}"
@@ -30,31 +30,70 @@ def ask_ai_cyber(chat_id, user_text):
     user_context[chat_id].append({'role': 'user', 'content': user_text})
     
     prompt = f"{SYSTEM_INSTRUCTION}\n\n"
-    for msg in user_context[chat_id][-6:]:
+    for msg in user_context[chat_id][-5:]:
         role_label = "Пузатик" if msg["role"] == "assistant" else "Собеседник"
         prompt += f"{role_label}: {msg['content']}\n"
     prompt += "Пузатик: "
     
     try:
-        # На сервере Render этот запрос улетит напрямую в Европу без лагов и блокировок!
-        res = requests.post(
-            "https://chateverywhere.app",
-            json={"model": "gpt-4o-mini", "prompts": [{"role": "user", "content": prompt}]},
-            timeout=12
-        )
-        if res.status_code == 200 and res.text:
-            ai_reply = res.text.strip()
-            user_context[chat_id].append({'role': 'assistant', 'content': ai_reply})
-            if len(user_context[chat_id]) > 12:
-                user_context[chat_id] = user_context[chat_id][-10:]
-            return ai_reply
+        # ВЕЧНЫЙ ХАКЕРСКИЙ КАНАЛ: Стучимся в официальный бесплатный ИИ от DuckDuckGo (Llama 3.1)
+        # Из Европы на Render он работает без ключей и капч со скоростью света!
+        session = requests.Session()
+        # Инициализируем сессию диалога, чтобы получить защитные куки DuckDuckGo
+        init_res = session.get("https://duckduckgo.com", headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/event-stream",
+            "x-vqd-accept": "1",
+            "Content-Type": "application/json"
+        }
+        
+        # Получаем обязательный внутренний токен верификации сети VQD
+        status_res = session.get("https://duckduckgo.com", headers=headers, timeout=5)
+        vqd_token = status_res.headers.get("x-vqd-token")
+        
+        if vqd_token:
+            headers["x-vqd-token"] = vqd_token
+            # Отправляем пацанский промпт напрямую в модель Llama
+            ai_res = session.post(
+                "https://duckduckgo.com",
+                headers=headers,
+                json={
+                    "model": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+                    "messages": [{"role": "user", "content": prompt}]
+                },
+                timeout=10
+            )
+            
+            if ai_res.status_code == 200:
+                # Извлекаем чистый текст из потокового ответа (SSE)
+                lines = ai_res.text.split('\n')
+                ai_reply = ""
+                for line in lines:
+                    if line.startswith("data:"):
+                        content = line.replace("data:", "").strip()
+                        if content and content != "[DONE]":
+                            import json
+                            try:
+                                js = json.loads(content)
+                                if "message" in js:
+                                    ai_reply += js["message"]
+                            except: pass
+                
+                if ai_reply:
+                    ai_reply = ai_reply.strip()
+                    user_context[chat_id].append({'role': 'assistant', 'content': ai_reply})
+                    if len(user_context[chat_id]) > 12:
+                        user_context[chat_id] = user_context[chat_id][-10:]
+                    return ai_reply
     except:
         pass
+        
     if user_context[chat_id] and user_context[chat_id][-1]['role'] == 'user':
         user_context[chat_id].pop()
     return "Эээ, уцы, че-то в натуре сеть заморосила жи есть! Жигани еще раз свой вопрос, ле!"
 
-# Веб-сервер для обмана Render, чтоб он не усыплял нашего бота
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
